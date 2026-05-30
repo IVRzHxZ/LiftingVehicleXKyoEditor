@@ -448,7 +448,7 @@ end)
 
 -- UI Toggle: Gems Farm
 Tabs.Main:AddToggle("AutoFarmToggle", {
-    Title = "Gems Farm (Instant TP)",
+    Title = "Gems Farm",
     Default = false,
     Callback = function(Value)
         _G.AutoFarm = Value
@@ -537,25 +537,33 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
+-- UI Options Tracker for Fluent
+local Options = Fluent.Options
+
 -- Tabs
 local Tabs = {
-    Main = Window:AddTab({ Title = "Coins", Icon = "coins" }) -- All features combined here
+    Main = Window:AddTab({ Title = "Coins", Icon = "coins" }) 
 }
 
 -- Shared Variables
 getgenv().AutoParadiseFarm = false
-local AutoPunchActive = false
 local CHEST_NAME = "Paradise"
-local WAIT_TIME_PER_CHEST = 1.30 
 local TotalChestsFarmed = 0
 
--- UI Elements: Everything inside the Coins Tab
+-- UI Elements
 local FarmToggle = Tabs.Main:AddToggle("FarmToggle", {Title = "Coins Farm", Default = false})
 
--- COMBINED: Auto Punch added right below the Coins Farm toggle
-local AutoPunchToggle = Tabs.Main:AddToggle("AutoPunch", {
-    Title = "Auto Punch", 
-    Default = false 
+-- GUMAGANANG SLIDER: Tamang Fluent syntax gamit ang string key at Options mapping
+Tabs.Main:AddSlider("ChestDelaySlider", {
+    Title = "Chest Farm Delay (Seconds)",
+    Description = "Lower value = faster farming, Higher value = safer",
+    Default = 1.30,
+    Min = 0.1,
+    Max = 3.0,
+    Rounding = 2,
+    Callback = function(Value)
+        -- Ang Fluent ay awtomatikong nag-a-update sa Options.ChestDelaySlider.Value
+    end
 })
 
 local CoinParagraph = Tabs.Main:AddParagraph({
@@ -624,7 +632,7 @@ local function getAllParadiseChests()
     return chests
 end
 
--- Pure Loop TP - Position Fixed 20 Studs Above Chest
+-- Pure Loop TP - Position Fixed 0.1 Studs Above Chest (Small Offset)
 local function loopTeleportToChest(targetPart)
     local character = LocalPlayer.Character
     if not character then return false end
@@ -636,7 +644,7 @@ local function loopTeleportToChest(targetPart)
     if not rootPart then return false end
     if not targetPart or not targetPart:IsDescendantOf(Workspace) then return false end
 
-    local targetCFrame = targetPart.CFrame * CFrame.new(0, 20, 0) 
+    local targetCFrame = targetPart.CFrame * CFrame.new(0, 2, 0) 
     
     rootPart.AssemblyLinearVelocity = Vector3.zero
     rootPart.AssemblyAngularVelocity = Vector3.zero
@@ -669,7 +677,7 @@ local function loopTeleportToChest(targetPart)
     return false
 end
 
--- Coins Farm Event Listener
+-- Combined Farm & Auto Punch Event Listener
 FarmToggle:OnChanged(function(Value)
     getgenv().AutoParadiseFarm = Value
 
@@ -677,10 +685,11 @@ FarmToggle:OnChanged(function(Value)
         startNoclip()
         Fluent:Notify({
             Title = "Farm Status",
-            Content = "Loop TP Enabled - Position Set 20 Studs Above Chest",
+            Content = "Coins Farm & Auto Punch Enabled!",
             Duration = 3
         })
 
+        -- Thread 1: Coins Farm Loop
         task.spawn(function()
             while getgenv().AutoParadiseFarm do
                 local char = LocalPlayer.Character
@@ -699,9 +708,11 @@ FarmToggle:OnChanged(function(Value)
                                     local successfullyFarmed = loopTeleportToChest(chestPart)
 
                                     if successfullyFarmed then
-                                        task.wait(WAIT_TIME_PER_CHEST)
+                                        -- Dito kinukuha ang live value mula sa slider habang tumatakbo ang loop
+                                        local currentDelay = Options.ChestDelaySlider and Options.ChestDelaySlider.Value or 1.30
+                                        task.wait(currentDelay)
                                     else
-                                        task.wait(111) 
+                                        task.wait(60) 
                                     end
                                 end
                             else
@@ -718,50 +729,44 @@ FarmToggle:OnChanged(function(Value)
             end
             removeFloatLock()
         end)
+
+        -- Thread 2: Auto Punch Loop
+        task.spawn(function()
+            while getgenv().AutoParadiseFarm do
+                local char = LocalPlayer.Character
+                local backpack = LocalPlayer:FindFirstChild("Backpack")
+                local tool = char and char:FindFirstChild("Punch")
+                
+                if not tool and backpack then
+                    local bpTool = backpack:FindFirstChild("Punch")
+                    if bpTool then
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if hum then
+                            hum:EquipTool(bpTool)
+                        end
+                    end
+                end
+                
+                if char and char:FindFirstChild("Punch") then
+                    char.Punch:Activate()
+                end
+                
+                task.wait(0.1)
+            end
+        end)
     else
         stopNoclip()
         Fluent:Notify({
             Title = "Farm Status",
-            Content = "Loop TP deactivated smoothly.",
+            Content = "Farm and Auto Punch deactivated.",
             Duration = 3
         })
     end
 end)
 
--- Auto Punch Event Listener
-AutoPunchToggle:OnChanged(function()
-    AutoPunchActive = AutoPunchToggle.Value
-    
-    if AutoPunchActive then
-       task.spawn(function()
-          while AutoPunchActive do
-             local char = LocalPlayer.Character
-             local backpack = LocalPlayer:FindFirstChild("Backpack")
-             local tool = char and char:FindFirstChild("Punch")
-             
-             if not tool and backpack then
-                local bpTool = backpack:FindFirstChild("Punch")
-                if bpTool then
-                   local hum = char and char:FindFirstChildOfClass("Humanoid")
-                   if hum then
-                      hum:EquipTool(bpTool)
-                   end
-                end
-             end
-             
-             if char and char:FindFirstChild("Punch") then
-                char.Punch:Activate()
-             end
-             
-             task.wait(0.1)
-          end
-       end)
-    end
-end)
-
 -- Structural Initialization
 pcall(function()
-    Window:SelectTab(1)
+    Window:SelectTab(Tabs.Main)
 end)
 
 local CombatTab = Window:AddTab({
