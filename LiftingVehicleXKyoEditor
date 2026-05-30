@@ -302,20 +302,20 @@ local Tabs = {
 local _G = {
     AutoFarm = false,
     LoopDelay = 0.01, 
-    LerpSpeed = 0.4,  
     SelectedZones = { ["Zone 1"] = true },
-    AutoPunchActive = false -- Integrated Auto Punch state
+    AutoPunchActive = false
 }
 
 -- Services & Variables
 local replicatedStorage = game:GetService("ReplicatedStorage")
 local runService = game:GetService("RunService")
-local gemSpawns = replicatedStorage:WaitForChild("GemSpawns")
-local mineRemote = replicatedStorage:WaitForChild("Remotes"):WaitForChild("MineGem")
+local gemSpawns = replicatedStorage:WaitForChild("GemSpawns", 10)
+local remotesFolder = replicatedStorage:WaitForChild("Remotes", 10)
+local mineRemote = remotesFolder and remotesFolder:WaitForChild("MineGem", 10)
 local player = game:GetService("Players").LocalPlayer
 
 local currentTargetCFrame = nil
-local flyConnection = nil
+local tpConnection = nil
 
 -- Generate mapping tables
 local zoneMapping = {}
@@ -339,56 +339,63 @@ runService.Stepped:Connect(function()
     end
 end)
 
--- Background Smooth Movement Engine
-local function startMovementEngine()
-    if flyConnection then flyConnection:Disconnect() end
+-- Instant Teleport Loop Engine
+local function startInstantTPEngine()
+    if tpConnection then tpConnection:Disconnect() end
     
-    flyConnection = runService.Heartbeat:Connect(function()
+    tpConnection = runService.Heartbeat:Connect(function()
         if not _G.AutoFarm or not player.Character then return end
         local root = player.Character:FindFirstChild("HumanoidRootPart")
         if not root or not currentTargetCFrame then return end
         
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
-        
-        local distance = (currentTargetCFrame.Position - root.Position).Magnitude
-        if distance < 1 then
-            root.CFrame = currentTargetCFrame
-        else
-            root.CFrame = root.CFrame:Lerp(currentTargetCFrame, _G.LerpSpeed)
-        end
+        root.CFrame = currentTargetCFrame
     end)
 end
 
--- Optimized Farming Loop Engine (Multi-Zone)
+-- Anti-Stop Farming Loop Engine (Deep-Copy Snapshot Protection)
 task.spawn(function()
     while true do
-        if _G.AutoFarm then
+        if _G.AutoFarm and gemSpawns and mineRemote then
             local farmedAny = false
             
+            -- GUMAWA NG SNAPSHOT: Kopyahin ang mga zones para hindi mag-error kapag binago sa dropdown
+            local currentZonesSnapshot = {}
             for zoneName, isSelected in pairs(_G.SelectedZones) do
+                currentZonesSnapshot[zoneName] = isSelected
+            end
+            
+            -- Ito ang babasahin ng loop para ligtas sa kahit anong pagbabago
+            for zoneName, isSelected in pairs(currentZonesSnapshot) do
                 if not _G.AutoFarm then break end
+                if not isSelected then continue end
                 
-                if isSelected then
-                    local folderName = zoneMapping[zoneName]
-                    local zoneFolder = gemSpawns:FindFirstChild(folderName)
+                -- Double check kung tinanggal na habang papunta sa zone na ito
+                if not _G.SelectedZones[zoneName] then continue end
+                
+                local folderName = zoneMapping[zoneName]
+                local zoneFolder = gemSpawns:FindFirstChild(folderName)
+                
+                if zoneFolder then
+                    local gems = zoneFolder:GetChildren()
                     
-                    if zoneFolder then
-                        local gems = zoneFolder:GetChildren()
+                    for _, gem in ipairs(gems) do
+                        if not _G.AutoFarm then break end
+                        if not _G.SelectedZones[zoneName] then break end -- Huminto agad kapag inalis ang zone na ito
                         
-                        for _, gem in ipairs(gems) do
-                            if not _G.AutoFarm or not _G.SelectedZones[zoneName] then break end
+                        if gem:IsA("BasePart") and gem.Parent == zoneFolder then
+                            farmedAny = true
+                            currentTargetCFrame = gem.CFrame * CFrame.new(0, 3, 0)
                             
-                            if gem:IsA("BasePart") then
-                                farmedAny = true
-                                currentTargetCFrame = gem.CFrame * CFrame.new(0, 3, 0)
+                            pcall(function()
                                 mineRemote:FireServer(gem)
-                                
-                                if _G.LoopDelay > 0 then
-                                    task.wait(_G.LoopDelay)
-                                else
-                                    runService.Heartbeat:Wait()
-                                end
+                            end)
+                            
+                            if _G.LoopDelay > 0 then
+                                task.wait(_G.LoopDelay)
+                            else
+                                runService.Heartbeat:Wait()
                             end
                         end
                     end
@@ -401,20 +408,54 @@ task.spawn(function()
     end
 end)
 
+-- Auto Punch Engine na may Fail-Safe para sa Respawn
+task.spawn(function()
+    while true do
+        if _G.AutoPunchActive then
+            pcall(function()
+                local char = player.Character
+                local backpack = player:FindFirstChild("Backpack")
+                
+                if char then
+                    local tool = char:FindFirstChild("Punch")
+                    
+                    if not tool and backpack then
+                        local bpTool = backpack:FindFirstChild("Punch")
+                        if bpTool then
+                            local hum = char:FindFirstChildOfClass("Humanoid")
+                            if hum and hum.Health > 0 then
+                                hum:EquipTool(bpTool)
+                            end
+                        end
+                    end
+                    
+                    local activeTool = char:FindFirstChild("Punch")
+                    if activeTool and activeTool:IsA("Tool") then
+                        activeTool:Activate()
+                    end
+                end
+            end)
+            task.wait(0.1)
+        else
+            task.wait(0.5)
+        end
+    end
+end)
+
 -- ==========================================
 -- GEMS MAIN TAB UI ELEMENTS
 -- ==========================================
 
 -- UI Toggle: Gems Farm
 Tabs.Main:AddToggle("AutoFarmToggle", {
-    Title = "Gems Farm",
+    Title = "Gems Farm (Instant TP)",
     Default = false,
     Callback = function(Value)
         _G.AutoFarm = Value
         if Value then
-            startMovementEngine()
+            startInstantTPEngine()
         else
-            if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+            if tpConnection then tpConnection:Disconnect() tpConnection = nil end
             currentTargetCFrame = nil
             if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                 player.Character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
@@ -423,7 +464,7 @@ Tabs.Main:AddToggle("AutoFarmToggle", {
     end
 })
 
--- UI Toggle: Auto Punch (Added directly to Main Tab)
+-- UI Toggle: Auto Punch
 local AutoPunchToggle = Tabs.Main:AddToggle("AutoPunch", {
     Title = "Auto Punch", 
     Default = false 
@@ -431,34 +472,6 @@ local AutoPunchToggle = Tabs.Main:AddToggle("AutoPunch", {
 
 AutoPunchToggle:OnChanged(function(Value)
     _G.AutoPunchActive = Value
-    
-    if _G.AutoPunchActive then
-        task.spawn(function()
-            while _G.AutoPunchActive do
-                local char = player.Character
-                local backpack = player:FindFirstChild("Backpack")
-                local tool = char and char:FindFirstChild("Punch")
-                
-                -- Equip tool if it is in the backpack
-                if not tool and backpack then
-                    local bpTool = backpack:FindFirstChild("Punch")
-                    if bpTool then
-                        local hum = char and char:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum:EquipTool(bpTool)
-                        end
-                    end
-                end
-                
-                -- Activate the punch tool
-                if char and char:FindFirstChild("Punch") then
-                    char.Punch:Activate()
-                end
-                
-                task.wait(0.1)
-            end
-        end)
-    end
 end)
 
 -- Fluent UI Multi-Dropdown Creation
@@ -471,13 +484,37 @@ local MultiDropdown = Tabs.Main:AddDropdown("ZoneDropdown", {
 })
 
 MultiDropdown:OnChanged(function(Value)
-    table.clear(_G.SelectedZones)
+    -- Ligtas na paraan: Gumawa muna ng bagong table bago palitan ang luma
+    local tempTable = {}
     for zoneName, state in pairs(Value) do
         if state == true then
-            _G.SelectedZones[zoneName] = true
+            tempTable[zoneName] = true
         end
     end
+    _G.SelectedZones = tempTable
 end)
+
+-- Button: Select All Zones
+Tabs.Main:AddButton({
+    Title = "Select All Zones",
+    Description = "Awtomatikong pipiliin ang lahat ng Zone 1 hanggang 30.",
+    Callback = function()
+        local allSelected = {}
+        for _, zoneName in ipairs(dropdownValues) do
+            allSelected[zoneName] = true
+        end
+        MultiDropdown:SetValue(allSelected)
+    end
+})
+
+-- Button: Deselect All Zones
+Tabs.Main:AddButton({
+    Title = "Deselect All Zones",
+    Description = "I-clear ang lahat ng napiling zone.",
+    Callback = function()
+        MultiDropdown:SetValue({})
+    end
+})
 
 -- UI Delay Slider
 Tabs.Main:AddSlider("DelaySlider", {
@@ -489,19 +526,6 @@ Tabs.Main:AddSlider("DelaySlider", {
     Rounding = 2,
     Callback = function(Value)
         _G.LoopDelay = Value
-    end
-})
-
--- UI Speed Slider
-Tabs.Main:AddSlider("LerpSpeedSlider", {
-    Title = "Tween Smoothness / Speed",
-    Description = "Taasan para mas maging mabilis ang lipad papunta sa gem (0.9 = Halos Instant TP)",
-    Default = 0.4,
-    Min = 0.1,
-    Max = 0.95,
-    Rounding = 2,
-    Callback = function(Value)
-        _G.LerpSpeed = Value
     end
 })
 
