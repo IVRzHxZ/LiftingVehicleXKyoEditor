@@ -709,7 +709,7 @@ FarmToggle:OnChanged(function(Value)
 
                                     if successfullyFarmed then
                                         -- Dito kinukuha ang live value mula sa slider habang tumatakbo ang loop
-                                        local currentDelay = Options.ChestDelaySlider and Options.ChestDelaySlider.Value or 1.30
+                                        local currentDelay = Options.ChestDelaySlider and Options.ChestDelaySlider.Value or 1.80
                                         task.wait(currentDelay)
                                     else
                                         task.wait(80) 
