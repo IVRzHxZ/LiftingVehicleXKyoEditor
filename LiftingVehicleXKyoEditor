@@ -952,6 +952,76 @@ game:GetService('RunService').RenderStepped:Connect(function()
     end
 end)
 
+-- [[ Core Logic Variables ]]
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+local voidTrollEnabled = false -- Keeps track of your Toggle state
+local isLoopRunning = false    -- Prevents multiple loops from running at once
+
+-- Update character reference if you reset or respawn
+player.CharacterAdded:Connect(function(newCharacter)
+    character = newCharacter
+    hrp = character:WaitForChild("HumanoidRootPart")
+end)
+
+-- [[ Repeated Void Escape Loop ]]
+local function startVoidLoop()
+    if isLoopRunning then return end
+    isLoopRunning = true
+    
+    -- This keeps running as long as the toggle is turned ON
+    while voidTrollEnabled and hrp and hrp.Parent do
+        -- Anchor your character's root part to freeze your physics presence on the surface
+        hrp.Anchored = true
+        
+        -- Store current height settings and location
+        workspace.FallenPartsDestroyHeight = -1000
+        local lastCFrame = hrp.CFrame
+
+        -- Teleport deep into the void safely away from attackers
+        hrp.CFrame = CFrame.new(Vector3.new(0, -500, 0))
+
+        task.wait(0.01) -- Time spent hiding in the void
+
+        -- Teleport safely back to your starting spot
+        hrp.CFrame = lastCFrame
+        workspace.FallenPartsDestroyHeight = -500
+        
+        -- Unanchor so you can move normally again on the surface
+        hrp.Anchored = false
+        
+        task.wait(0.5) -- Delay before teleporting down again
+    end
+    
+    -- Clean up physics state just in case you toggle it off mid-teleport
+    if hrp then
+        hrp.Anchored = false
+    end
+    isLoopRunning = false
+end
+
+-- [[ Fluent UI Toggle Setup ]]
+local Toggle = CombatTab:AddToggle("AntiLoopKillToggle", {
+    Title = "Anti Loop kill",
+    Default = false,
+    Callback = function(Value)
+        voidTrollEnabled = Value
+        print("Anti Loop Kill Status: ", voidTrollEnabled)
+        
+        -- Start the repeating loop if turned ON
+        if voidTrollEnabled then
+            task.spawn(startVoidLoop)
+        else
+            -- If turned OFF instantly make sure physics are restored
+            if hrp then
+                hrp.Anchored = false
+            end
+        end
+    end
+})
+
 -- Select the interface tab upon loading
 Window:SelectTab(1)
 
