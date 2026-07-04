@@ -992,7 +992,7 @@ local function startVoidLoop()
         -- Unanchor so you can move normally again on the surface
         hrp.Anchored = false
         
-        task.wait(0.5) -- Delay before teleporting down again
+        task.wait(0.01) -- Delay before teleporting down again
     end
     
     -- Clean up physics state just in case you toggle it off mid-teleport
