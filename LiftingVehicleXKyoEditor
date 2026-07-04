@@ -712,7 +712,7 @@ FarmToggle:OnChanged(function(Value)
                                         local currentDelay = Options.ChestDelaySlider and Options.ChestDelaySlider.Value or 1.80
                                         task.wait(currentDelay)
                                     else
-                                        task.wait(90) 
+                                        task.wait(100) 
                                     end
                                 end
                             else
