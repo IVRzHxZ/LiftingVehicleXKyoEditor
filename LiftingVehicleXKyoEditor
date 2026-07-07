@@ -271,6 +271,97 @@ MainTab:AddSwitch("Anti-AFK ☕", function(Value)
     end
 end)
 
+-- Global state
+local _G = getgenv and getgenv() or _G
+_G.HideGainedPopups = false
+
+-- Storage to remember original UI states for restoration
+local originalStates = {}
+
+-- Words commonly found in gained/reward pop-ups
+local targetKeywords = {"gain", "get", "received", "reward", "collect", "+", "level", "claim", "exp", "xp", "coins", "cash"}
+
+-- Function to check if a UI element contains reward keywords
+local function isRewardUi(element)
+    if not element:IsA("GuiObject") then return false end
+    
+    -- Check text if the element itself is a text object
+    if element:IsA("TextLabel") or element:IsA("TextButton") then
+        local txt = string.lower(element.Text)
+        for _, keyword in ipairs(targetKeywords) do
+            if string.find(txt, keyword) then return true end
+        end
+    end
+    
+    -- Check all text labels inside the element
+    for _, descendant in ipairs(element:GetDescendants()) do
+        if descendant:IsA("TextLabel") then
+            local txt = string.lower(descendant.Text)
+            for _, keyword in ipairs(targetKeywords) do
+                if string.find(txt, keyword) then return true end
+            end
+        end
+    end
+    
+    return false
+end
+
+-- Function to process and hide an element
+local function hideElement(element)
+    if not isRewardUi(element) then return end
+    
+    -- Only save the original state if we haven't logged it yet
+    if not originalStates[element] then
+        originalStates[element] = {
+            Visible = element.Visible,
+            Position = element.Position
+        }
+    end
+    
+    -- Hide it completely
+    element.Visible = false
+    element.Position = UDim2.new(5, 0, 5, 0) -- Move far off-screen so game scripts can't force it visible
+end
+
+-- Function to restore all hidden elements back to normal
+local function restoreElements()
+    for element, state in pairs(originalStates) do
+        if element and element.Parent then
+            element.Visible = state.Visible
+            element.Position = state.Position
+        end
+    end
+    table.clear(originalStates) -- Clear the cache
+end
+
+-- Background listener for newly spawned pop-ups
+local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+playerGui.DescendantAdded:Connect(function(descendant)
+    if _G.HideGainedPopups then
+        task.wait(0.05) -- Small delay to allow text/properties to load completely
+        if _G.HideGainedPopups then -- Double check toggle state after wait
+            hideElement(descendant)
+        end
+    end
+end)
+
+-- Elerium UI Toggle
+MainTab:AddSwitch("Hide Gained Popups", function(state)
+    _G.HideGainedPopups = state
+    
+    if state then
+        -- Scan and hide existing reward pop-ups
+        for _, desc in ipairs(playerGui:GetDescendants()) do
+            hideElement(desc)
+        end
+    else
+        -- Instantly bring everything back to normal
+        restoreElements()
+    end
+end)
+
+MainTab:AddLabel("Status: Ready")
+
 -- Create the Prestige Tab
 local MainTab = window:AddTab("Prestige")
 
