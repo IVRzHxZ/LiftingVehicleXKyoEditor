@@ -159,9 +159,9 @@ local MainTab = window:AddTab("Farm")
 local NormalLiftActive = false
 local FastLiftActive = false
 
--- 1. NORMAL LIFT SWITCH
+-- 1. NORMAL LIFT SWITCH (NO-EQUIP METHOD)
 MainTab:AddSwitch("Normal Lift💪", function(Value)
-    NormalLiftActive = Value -- Receives true/false straight from the switch
+    NormalLiftActive = Value
     
     if NormalLiftActive then
         task.spawn(function()
@@ -173,37 +173,36 @@ MainTab:AddSwitch("Normal Lift💪", function(Value)
                 local backpack = localPlayer:FindFirstChild("Backpack")
                 
                 if character and backpack then
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                    local vehicle = character:FindFirstChild("Vehicle")
-                    
-                    -- AUTO-EQUIP: Look for the vehicle tool
-                    if not vehicle and humanoid then
-                        local targetTool = backpack:FindFirstChild("Vehicle")
-                        if targetTool and targetTool:IsA("Tool") then
-                            humanoid:EquipTool(targetTool)
-                            task.wait(1) 
-                            vehicle = character:FindFirstChild("Vehicle")
+                    -- Una, tinitingnan kung hawak pa ba (i-unequip natin para mawala ang animation)
+                    local equippedTool = character:FindFirstChild("Vehicle")
+                    if equippedTool then
+                        local humanoid = character:FindFirstChildOfClass("Humanoid")
+                        if humanoid then
+                            humanoid:UnequipTools()
                         end
+                        task.wait(0.1)
                     end
                     
-                    -- LIFT: Fire the remote code
-                    if vehicle then
-                        local server = vehicle:FindFirstChild("Server")
+                    -- Diretsong basahin ang Tool habang nasa loob LANG ng Backpack (Inventory)
+                    local targetTool = backpack:FindFirstChild("Vehicle")
+                    if targetTool then
+                        local server = targetTool:FindFirstChild("Server")
                         local lift = server and server:FindFirstChild("Lift")
                         
+                        -- Dito natin pilit na pinalalayas ang remote kahit hindi mo hawak!
                         if lift then
                             lift:FireServer(true)
                         end
                     end
                 end
                 
-                task.wait(0.5) -- Normal speed delay
+                task.wait(0.5) -- Normal delay
             end
         end)
     end
 end)
 
--- 2. FAST LIFT SWITCH
+-- 2. FAST LIFT SWITCH (NO-EQUIP METHOD)
 MainTab:AddSwitch("Fast Lift💪", function(Value)
     FastLiftActive = Value
     
@@ -217,22 +216,20 @@ MainTab:AddSwitch("Fast Lift💪", function(Value)
                 local backpack = localPlayer:FindFirstChild("Backpack")
                 
                 if character and backpack then
-                    local humanoid = character:FindFirstChildOfClass("Humanoid")
-                    local vehicle = character:FindFirstChild("Vehicle")
-                    
-                    -- AUTO-EQUIP: Look for the vehicle tool
-                    if not vehicle and humanoid then
-                        local targetTool = backpack:FindFirstChild("Vehicle")
-                        if targetTool and targetTool:IsA("Tool") then
-                            humanoid:EquipTool(targetTool)
-                            task.wait(1) 
-                            vehicle = character:FindFirstChild("Vehicle")
+                    -- Siguraduhing hindi naka-equip para walang arm animation
+                    local equippedTool = character:FindFirstChild("Vehicle")
+                    if equippedTool then
+                        local humanoid = character:FindFirstChildOfClass("Humanoid")
+                        if humanoid then
+                            humanoid:UnequipTools()
                         end
+                        task.wait(0.1)
                     end
                     
-                    -- FAST LIFT: Fire the remote code rapidly
-                    if vehicle then
-                        local server = vehicle:FindFirstChild("Server")
+                    -- Remote action direkta mula sa inventory bag
+                    local targetTool = backpack:FindFirstChild("Vehicle")
+                    if targetTool then
+                        local server = targetTool:FindFirstChild("Server")
                         local lift = server and server:FindFirstChild("Lift")
                         
                         if lift then
@@ -241,7 +238,7 @@ MainTab:AddSwitch("Fast Lift💪", function(Value)
                     end
                 end
                 
-                task.wait(0.1) -- Fast speed delay
+                task.wait(0.1) -- Fast delay
             end
         end)
     end
@@ -255,7 +252,6 @@ local AntiAFKConnection = nil
 
 MainTab:AddSwitch("Anti-AFK ☕", function(Value)
     if Value then
-        -- Turn ON Anti-AFK
         if not AntiAFKConnection then
             AntiAFKConnection = player.Idled:Connect(function()
                 VirtualUser:CaptureController()
@@ -263,7 +259,6 @@ MainTab:AddSwitch("Anti-AFK ☕", function(Value)
             end)
         end
     else
-        -- Turn OFF Anti-AFK
         if AntiAFKConnection then
             AntiAFKConnection:Disconnect()
             AntiAFKConnection = nil
@@ -271,29 +266,20 @@ MainTab:AddSwitch("Anti-AFK ☕", function(Value)
     end
 end)
 
--- Global state
+-- Global state for Popups
 local _G = getgenv and getgenv() or _G
 _G.HideGainedPopups = false
-
--- Storage to remember original UI states for restoration
 local originalStates = {}
-
--- Words commonly found in gained/reward pop-ups
 local targetKeywords = {"gain", "get", "received", "reward", "collect", "+", "level", "claim", "exp", "xp", "coins", "cash"}
 
--- Function to check if a UI element contains reward keywords
 local function isRewardUi(element)
     if not element:IsA("GuiObject") then return false end
-    
-    -- Check text if the element itself is a text object
     if element:IsA("TextLabel") or element:IsA("TextButton") then
         local txt = string.lower(element.Text)
         for _, keyword in ipairs(targetKeywords) do
             if string.find(txt, keyword) then return true end
         end
     end
-    
-    -- Check all text labels inside the element
     for _, descendant in ipairs(element:GetDescendants()) do
         if descendant:IsA("TextLabel") then
             local txt = string.lower(descendant.Text)
@@ -302,28 +288,21 @@ local function isRewardUi(element)
             end
         end
     end
-    
     return false
 end
 
--- Function to process and hide an element
 local function hideElement(element)
     if not isRewardUi(element) then return end
-    
-    -- Only save the original state if we haven't logged it yet
     if not originalStates[element] then
         originalStates[element] = {
             Visible = element.Visible,
             Position = element.Position
         }
     end
-    
-    -- Hide it completely
     element.Visible = false
-    element.Position = UDim2.new(5, 0, 5, 0) -- Move far off-screen so game scripts can't force it visible
+    element.Position = UDim2.new(5, 0, 5, 0)
 end
 
--- Function to restore all hidden elements back to normal
 local function restoreElements()
     for element, state in pairs(originalStates) do
         if element and element.Parent then
@@ -331,31 +310,26 @@ local function restoreElements()
             element.Position = state.Position
         end
     end
-    table.clear(originalStates) -- Clear the cache
+    table.clear(originalStates)
 end
 
--- Background listener for newly spawned pop-ups
 local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 playerGui.DescendantAdded:Connect(function(descendant)
     if _G.HideGainedPopups then
-        task.wait(0.05) -- Small delay to allow text/properties to load completely
-        if _G.HideGainedPopups then -- Double check toggle state after wait
+        task.wait(0.05)
+        if _G.HideGainedPopups then
             hideElement(descendant)
         end
     end
 end)
 
--- Elerium UI Toggle
 MainTab:AddSwitch("Hide Gained Popups", function(state)
     _G.HideGainedPopups = state
-    
     if state then
-        -- Scan and hide existing reward pop-ups
         for _, desc in ipairs(playerGui:GetDescendants()) do
             hideElement(desc)
         end
     else
-        -- Instantly bring everything back to normal
         restoreElements()
     end
 end)
