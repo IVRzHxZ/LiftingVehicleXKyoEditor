@@ -967,6 +967,9 @@ local Tab = window:AddTab("☠️ Combat") -- Name of tab
 
 -- [[ UI Elements Setup ]]
 
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer -- Fixes the "index nil with Character" error
+
 -- 5. Loop TP Kill All Switch
 Tab:AddSwitch("Loop TP Kill All", function(Value)
     LoopKillAllActive = Value
@@ -985,7 +988,13 @@ Tab:AddSwitch("Loop TP Kill All", function(Value)
                     for _, targetPlayer in ipairs(targetList) do
                         if not LoopKillAllActive then break end
                         
-                        if targetPlayer ~= player and targetPlayer.Character and not isWhitelisted(targetPlayer) then
+                        -- Added a fallback check for isWhitelisted in case it isn't defined
+                        local whitelisted = false
+                        if type(isWhitelisted) == "function" then
+                            whitelisted = isWhitelisted(targetPlayer)
+                        end
+                        
+                        if targetPlayer ~= player and targetPlayer.Character and not whitelisted then
                             local tRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
                             local timeSpent = 0
                             
@@ -1010,11 +1019,6 @@ Tab:AddSwitch("Loop TP Kill All", function(Value)
                                 
                                 if tool then
                                     tool:Activate()
-                                end
-                                
-                                local remotes = ReplicatedStorage:FindFirstChild("RemotesEvent")
-                                if remotes and remotes:FindFirstChild("SizeChanged") then
-                                    remotes.SizeChanged:FireServer(1)
                                 end
                                 
                                 task.wait(0.05)
